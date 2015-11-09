@@ -10,7 +10,6 @@
 
     Lasha Tavartkiladze
     2015-07-21
-    Public Domain
 */ 
 
 
@@ -28,8 +27,20 @@ var node = {
 //
 // Escape quotes and slashs.
 //
+var escapeRegExp = /\\|'|\r|\n|\u2028|\u2029/g;
+var escapes = {
+    "'": "'",
+    '\\': '\\',
+    '\r': 'r',
+    '\n': 'n',
+    '\u2028': 'u2028',
+    '\u2029': 'u2029'
+};
 function escapeChars(str) {
-    return str.replace(/'|\\/g, '\\$&');
+    return str.replace(escapeRegExp, replaceChar);
+}
+function replaceChar(match) {
+    return '\\' + escapes[match];
 }
 
 
@@ -56,8 +67,8 @@ function compile(content) {
 
         .replace(/<%=([^<]+)%>/g, "' + ($1) + '")
         .replace(/<%([^<]+)%>/g,  "'; $1 _jstml += '")
-        .replace(/\\'/g, '\'')    // temp fix: unescape quotes inside evaluated scripts.
-        .replace(/\n|\r|\t/g, '') // temp fix: remove newlines.
+        //.replace(/\\'/g, '\'')    // temp fix: unescape quotes inside evaluated scripts.
+        //.replace(/\n|\r|\t/g, '') // temp fix: remove newlines.
 
     + "'; return _jstml;";
 }
@@ -125,9 +136,10 @@ var output = '';
 argv.forEach(function (filePath) {
     if (node.fs.statSync(filePath).isFile()) {
         var content  = node.fs.readFileSync(filePath, 'utf8');
-        var funcName = node.path.basename(filePath).replace(/[.]jstml/, '');
-        var prefix   = expandPrefix(namespace + '.' + camelCase(funcName));
-        var func     = wrapFunctionBody(camelCase(funcName), compile(content));
+        var fileName = node.path.basename(filePath, '.jstml');
+        var funcName = camelCase(fileName);
+        var prefix   = expandPrefix(namespace + '.' + funcName);
+        var func     = wrapFunctionBody(funcName, compile(content));
         
         output += namespace ? prefix + func : func;
     }
