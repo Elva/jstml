@@ -9,15 +9,12 @@
     jstml path/to/templates/*.jstml APP.theme.whatever > theme.whatever.js
 
     Lasha Tavartkiladze
-    2015-07-21
+    2015-12-11
 */ 
 
 
 
-//
-// Node modules.
-//
-var node = {
+var lib = {
     path: require('path'),
     fs:   require('fs')
 };
@@ -36,17 +33,23 @@ var escapes = {
     '\u2028': 'u2028',
     '\u2029': 'u2029'
 };
-function escapeChars(str) {
+function escapeChar(str) {
     return str.replace(escapeRegExp, replaceChar);
 }
 function replaceChar(match) {
     return '\\' + escapes[match];
 }
+var templateSettings = {
+    evaluate: /<%([\s\S]+?)%>/g,
+    interpolate: /<%=([\s\S]+?)%>/g,
+    escape: /<%-([\s\S]+?)%>/g
+};
 
 
 
 //
 // Compile template content to a Javascript eval string.
+// Heavily based on underscore.js templating.
 //
 //    compile('<ul>
 //        <% [1, 2, 3, 4, 5].forEach(function (num) { %>
@@ -63,14 +66,44 @@ function replaceChar(match) {
 //    _jstml += '</ul>'; return _jstml";
 //
 function compile(content) {
-    return "var _jstml = ''; _jstml += '" + escapeChars(content)
+    // Combine delimiters into one regular expression via alternation.
+    var matcher = RegExp([
+      templateSettings.escape.source,
+      templateSettings.interpolate.source,
+      templateSettings.evaluate.source
+    ].join('|') + '|$', 'g');
 
-        .replace(/<%=([^<]+)%>/g, "' + ($1) + '")
-        .replace(/<%([^<]+)%>/g,  "'; $1 _jstml += '")
-        //.replace(/\\'/g, '\'')    // temp fix: unescape quotes inside evaluated scripts.
-        //.replace(/\n|\r|\t/g, '') // temp fix: remove newlines.
+    // Compile the template source, escaping string literals appropriately.
+    var index = 0;
+    var source = "__p += '";
+    content.replace(matcher, function(match, escape, interpolate, evaluate, offset) {
+        source += content.slice(index, offset).replace(escapeRegExp, escapeChar);
+        index = offset + match.length;
 
-    + "'; return _jstml;";
+        if (escape) {
+            source += "'+\n((__t=(" + escape + "))==null?'':_.escape(__t))+\n'";
+        } else if (interpolate) {
+            source += "'+\n((__t=(" + interpolate + "))==null?'':__t)+\n'";
+        } else if (evaluate) {
+            source += "';\n" + evaluate + "\n__p += '";
+        }
+
+      // Adobe VMs need the match returned to produce the correct offset.
+      return match;
+    });
+    source += "';\n";
+
+    source = "var __t, __p = '', __j = Array.prototype.join," + 
+             "print = function() { __p += __j.call(arguments,''); };\n" + source + 'return __p;\n';
+
+    return source;
+
+    // return "var _jstml = ''; _jstml += '" + escapeChars(content)
+
+    //     .replace(/<%=([^<]+)%>/g, "' + ($1) + '")
+    //     .replace(/<%([^<]+)%>/g,  "'; $1 _jstml += '")
+
+    // + "'; return _jstml;";
 }
 
 
@@ -134,9 +167,9 @@ var namespace = argv.pop();
 var output = '';
 
 argv.forEach(function (filePath) {
-    if (node.fs.statSync(filePath).isFile()) {
-        var content  = node.fs.readFileSync(filePath, 'utf8');
-        var fileName = node.path.basename(filePath, '.jstml');
+    if (lib.fs.statSync(filePath).isFile()) {
+        var content  = lib.fs.readFileSync(filePath, 'utf8');
+        var fileName = lib.path.basename(filePath, '.jstml');
         var funcName = camelCase(fileName);
         var prefix   = expandPrefix(namespace + '.' + funcName);
         var func     = wrapFunctionBody(funcName, compile(content));
