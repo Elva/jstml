@@ -42,15 +42,16 @@ function replaceChar(match) {
     return '\\' + escapes[match];
 }
 
+
+
+// Template settings.
 var templateSettings = {
-    escape:      /<%-([\s\S]+?)%>/g,
     interpolate: /<%=([\s\S]+?)%>/g,
     evaluate:    /<%([\s\S]+?)%>/g
 };
 
 // Combine delimiters into one regular expression via alternation.
 var matcher = RegExp([
-    templateSettings.escape.source,
     templateSettings.interpolate.source,
     templateSettings.evaluate.source
 ].join('|') + '|$', 'g');
@@ -59,7 +60,7 @@ var matcher = RegExp([
 
 //
 // Compile template content to a Javascript eval string, escaping string literals appropriately.
-// Heavily based on underscore.js templating.
+// Based on underscore.js templating.
 //
 //    compile('<ul>
 //        <% [1, 2, 3, 4, 5].forEach(function (num) { %>
@@ -77,23 +78,21 @@ var matcher = RegExp([
 //
 function compile(content) {
     var index = 0;
-    var source = "__p += '";
+    var source = "__jstml += '";
 
-    content.replace(matcher, function (match, escape, interpolate, evaluate, offset) {
+    content.replace(matcher, function (match, interpolate, evaluate, offset) {
         source += content.slice(index, offset).replace(escapeRegExp, escapeChar);
         index = offset + match.length;
 
-        if (escape) {
-            source += "'+\n((__t=(" + escape + "))==null?'':_.escape(__t))+\n'";
-        } else if (interpolate) {
-            source += "'+\n((__t=(" + interpolate + "))==null?'':__t)+\n'";
+        if (interpolate) {
+            source += "'+\n( (__t = (" + interpolate + ")) == null ? '' : __t ) +\n'";
         } else if (evaluate) {
-            source += "';\n" + evaluate + "\n__p += '";
+            source += "';\n" + evaluate + "\n__jstml += '";
         }
     });
 
     source += "';\n";
-    source = "var __t, __p = '';\n" + source + 'return __p;\n';
+    source = "var __t, __jstml = '';\n" + source + 'return __jstml;\n';
 
     return source;
 }
