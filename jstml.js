@@ -9,7 +9,7 @@
     jstml path/to/templates/*.jstml APP.theme.whatever > theme.whatever.js
 
     Lasha Tavartkiladze
-    2015-12-11
+    2015-12-22
 */ 
 
 
@@ -33,22 +33,32 @@ var escapes = {
     '\u2028': 'u2028',
     '\u2029': 'u2029'
 };
+
 function escapeChar(str) {
     return str.replace(escapeRegExp, replaceChar);
 }
+
 function replaceChar(match) {
     return '\\' + escapes[match];
 }
+
 var templateSettings = {
-    evaluate: /<%([\s\S]+?)%>/g,
+    escape:      /<%-([\s\S]+?)%>/g,
     interpolate: /<%=([\s\S]+?)%>/g,
-    escape: /<%-([\s\S]+?)%>/g
+    evaluate:    /<%([\s\S]+?)%>/g
 };
+
+// Combine delimiters into one regular expression via alternation.
+var matcher = RegExp([
+    templateSettings.escape.source,
+    templateSettings.interpolate.source,
+    templateSettings.evaluate.source
+].join('|') + '|$', 'g');
 
 
 
 //
-// Compile template content to a Javascript eval string.
+// Compile template content to a Javascript eval string, escaping string literals appropriately.
 // Heavily based on underscore.js templating.
 //
 //    compile('<ul>
@@ -66,17 +76,10 @@ var templateSettings = {
 //    _jstml += '</ul>'; return _jstml";
 //
 function compile(content) {
-    // Combine delimiters into one regular expression via alternation.
-    var matcher = RegExp([
-      templateSettings.escape.source,
-      templateSettings.interpolate.source,
-      templateSettings.evaluate.source
-    ].join('|') + '|$', 'g');
-
-    // Compile the template source, escaping string literals appropriately.
     var index = 0;
     var source = "__p += '";
-    content.replace(matcher, function(match, escape, interpolate, evaluate, offset) {
+
+    content.replace(matcher, function (match, escape, interpolate, evaluate, offset) {
         source += content.slice(index, offset).replace(escapeRegExp, escapeChar);
         index = offset + match.length;
 
@@ -87,23 +90,12 @@ function compile(content) {
         } else if (evaluate) {
             source += "';\n" + evaluate + "\n__p += '";
         }
-
-      // Adobe VMs need the match returned to produce the correct offset.
-      return match;
     });
-    source += "';\n";
 
-    source = "var __t, __p = '', __j = Array.prototype.join," + 
-             "print = function() { __p += __j.call(arguments,''); };\n" + source + 'return __p;\n';
+    source += "';\n";
+    source = "var __t, __p = '';\n" + source + 'return __p;\n';
 
     return source;
-
-    // return "var _jstml = ''; _jstml += '" + escapeChars(content)
-
-    //     .replace(/<%=([^<]+)%>/g, "' + ($1) + '")
-    //     .replace(/<%([^<]+)%>/g,  "'; $1 _jstml += '")
-
-    // + "'; return _jstml;";
 }
 
 
