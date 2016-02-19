@@ -5,11 +5,11 @@
     Javascript template pre-compiler with namespacing support.
 
     Usage:
-    jstml filepath(s) namespace > output/file/path
-    jstml path/to/templates/*.jstml APP.theme.whatever > theme.whatever.js
+    jstml --dir=src/templates > templates.js
+    jstml --dir=src/templates --namespace=MyApp.templates > templates.js
 
     Lasha Tavartkiladze
-    2015-12-22
+    2016-02-19
 */ 
 
 
@@ -109,15 +109,15 @@ function wrapFunctionBody(name, body) {
 
 
 //
-// expandPrefix('APP.theme.whatever')
+// expandNamespace('APP.theme.render')
 //
 // Returns:
 //
 // 'APP.theme = APP.theme = {};
-//  APP.theme.whatever = '
+//  APP.theme.render = '
 //
-function expandPrefix(prefix) {
-    var parts = prefix.split('.');
+function expandNamespace(namespace) {
+    var parts = namespace.split('.');
     var p = '';
     var str = '';
 
@@ -140,7 +140,7 @@ function expandPrefix(prefix) {
 
 
 //
-// Convert dashed-string to camelCased one.
+// Convert dashed string to camelCased one.
 //
 function camelCase(str) { 
     return str.toLowerCase().replace(/-(.)/g, function (match, charAfterDash) {
@@ -151,18 +151,69 @@ function camelCase(str) {
 
 
 //
+// Parse command line arguments.
+// --yes=no => { yes: "no" }
+//
+function parseArgs(args) {
+    var parsedArgs = {};
+    var dashesRe = /^--/;
+
+    args.forEach(function (arg) {
+        var parts = arg.split('=');
+        if (parts.length === 2 && dashesRe.test(parts[0])) {
+            parsedArgs[parts[0].replace(dashesRe, '')] = parts[1];
+        }
+    });
+
+    return parsedArgs;
+}
+
+
+
+//
+// Walk inside a directory hierarcy recursively 
+// and return an array of all file paths found.
+//
+function getAllFilePathsSync(dirPath) {
+    var files = [];
+
+    lib.fs.readdirSync(dirPath).forEach(function (filename) {
+        var path = lib.path.join(dirPath, filename);
+        var stat = lib.fs.statSync(path);
+
+        if (stat && stat.isDirectory()) {
+            files = files.concat(getAllFilePathsSync(path));
+        } else if (stat.isFile()) {
+            files.push(path);
+        }
+    });
+
+    return files;
+}
+
+
+
+//
 // CLI
 //
-var argv = process.argv.slice(2);
-var namespace = argv.pop();
+var argv = parseArgs(process.argv.slice(2));
+var dirPath = argv.dir || '.';
+var namespace = argv.namespace || 'APP.TEMPLATE';
+var extension = argv.extension || '.jstml';
 var output = '';
 
-argv.forEach(function (filePath) {
-    if (lib.fs.statSync(filePath).isFile()) {
+var files = getAllFilePathsSync(dirPath);
+
+files.forEach(function (filePath) {
+    if (filePath.indexOf(extension) !== -1) {
+        var folderNames = filePath.replace(dirPath, '').split('/').filter(function (name) {
+            return name && name.indexOf(extension) === -1;
+        }).join('.');
         var content  = lib.fs.readFileSync(filePath, 'utf8');
         var fileName = lib.path.basename(filePath, '.jstml');
         var funcName = camelCase(fileName);
-        var prefix   = expandPrefix(namespace + '.' + funcName);
+        var fullName = folderNames ? [folderNames, funcName].join('.') : funcName;
+        var prefix   = expandNamespace([namespace, fullName].join('.'));
         var func     = wrapFunctionBody(funcName, compile(content));
         
         output += namespace ? prefix + func : func;
