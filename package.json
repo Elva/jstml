@@ -1,9 +1,9 @@
 {
   "name": "jstml",
   "description": "Javascript template pre-compiler with namespacing support.",
-  "version": "1.2.0",
+  "version": "1.2.1",
   "author": "Lasha Tavartkiladze (coloraggio)",
   "license": "MIT",
-  "repository": "ElvaTeam/jstml",
+  "repository": "Elva/jstml",
   "bin": "./jstml.js"
 }
