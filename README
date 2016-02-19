@@ -1,7 +1,0 @@
-Javascript template pre-compiler with namespacing support.
-
-    npm install -g jstml
-
-jstml filepath(s) namespace > compiled.js
-
-    jstml path/to/templates/*.jstml APP.theme.whatever > compiled.js
