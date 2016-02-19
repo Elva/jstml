@@ -200,9 +200,8 @@ var argv = parseArgs(process.argv.slice(2));
 var dirPath = argv.dir || '.';
 var namespace = argv.namespace || 'APP.TEMPLATE';
 var extension = argv.extension || '.jstml';
-var output = '';
-
 var files = getAllFilePathsSync(dirPath);
+var output = '';
 
 files.forEach(function (filePath) {
     if (filePath.indexOf(extension) !== -1) {
