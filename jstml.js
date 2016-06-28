@@ -207,7 +207,7 @@ files.forEach(function (filePath) {
     if (filePath.indexOf(extension) !== -1) {
         var folderNames = filePath.replace(dirPath, '').split('/').filter(function (name) {
             return name && name.indexOf(extension) === -1;
-        }).join('.');
+        }).map(camelCase).join('.');
         var content  = lib.fs.readFileSync(filePath, 'utf8');
         var fileName = lib.path.basename(filePath, '.jstml');
         var funcName = camelCase(fileName);
