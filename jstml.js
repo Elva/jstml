@@ -21,9 +21,14 @@ var lib = {
 
 
 
-//
-// Escape quotes and slashs.
-//
+var escapeMap = {
+    '&': '&amp;',
+    '<': '&lt;',
+    '>': '&gt;',
+    '"': '&quot;',
+    "'": '&#x27;',
+    '`': '&#x60;'
+};
 var escapeRegExp = /\\|'|\r|\n|\u2028|\u2029/g;
 var escapes = {
     "'": "'",
@@ -33,6 +38,21 @@ var escapes = {
     '\u2028': 'u2028',
     '\u2029': 'u2029'
 };
+
+function createEscaper(map) {
+    function escaper(match) {
+        return map[match];
+    }
+
+    var source = '(?:' + Object.keys(map).join('|') + ')';
+    var testRegexp = RegExp(source);
+    var replaceRegexp = RegExp(source, 'g');
+
+    return function(string) {
+        string = string == null ? '' : '' + string;
+        return testRegexp.test(string) ? string.replace(replaceRegexp, escaper) : string;
+    };
+}
 
 function escapeChar(str) {
     return str.replace(escapeRegExp, replaceChar);
@@ -47,16 +67,19 @@ function replaceChar(match) {
 // Template settings.
 var templateSettings = {
     interpolate: /<%=([\s\S]+?)%>/g,
-    evaluate:    /<%([\s\S]+?)%>/g
+    evaluate:    /<%([\s\S]+?)%>/g,
+    escape:      /<%-([\s\S]+?)%>/g
 };
 
 // Combine delimiters into one regular expression via alternation.
 var matcher = RegExp([
     templateSettings.interpolate.source,
-    templateSettings.evaluate.source
+    templateSettings.evaluate.source,
+    templateSettings.escape.source
 ].join('|') + '|$', 'g');
 
 
+var escapeHTML = createEscaper(createEscaper);
 
 //
 // Compile template content to a Javascript eval string, escaping string literals appropriately.
@@ -80,11 +103,13 @@ function compile(content) {
     var index = 0;
     var source = "__jstml += '";
 
-    content.replace(matcher, function (match, interpolate, evaluate, offset) {
+    content.replace(matcher, function (match, interpolate, evaluate, escape, offset) {
         source += content.slice(index, offset).replace(escapeRegExp, escapeChar);
         index = offset + match.length;
 
-        if (interpolate) {
+        if (escape) {
+            source += "'+\n((__t=(" + escape + "))==null?'':_.escape(__t))+\n'";
+        } else if (interpolate) {
             source += "'+\n( (__t = (" + interpolate + ")) == null ? '' : __t ) +\n'";
         } else if (evaluate) {
             source += "';\n" + evaluate + "\n__jstml += '";
@@ -197,11 +222,14 @@ function getAllFilePathsSync(dirPath) {
 // CLI
 //
 var argv = parseArgs(process.argv.slice(2));
+var isNewFormat = !!argv.newformat || false;
 var dirPath = argv.dir || '.';
 var namespace = argv.namespace || 'APP.TEMPLATE';
 var extension = argv.extension || '.jstml';
+var outputDir = argv.outdir || './build';
 var files = getAllFilePathsSync(dirPath);
 var output = '';
+var lessCSSOutput = '';
 
 files.forEach(function (filePath) {
     if (filePath.indexOf(extension) !== -1) {
@@ -212,11 +240,41 @@ files.forEach(function (filePath) {
         var fileName = lib.path.basename(filePath, '.jstml');
         var funcName = camelCase(fileName);
         var fullName = folderNames ? [folderNames, funcName].join('.') : funcName;
-        var prefix   = expandNamespace([namespace, fullName].join('.'));
-        var func     = wrapFunctionBody(funcName, compile(content));
-        
-        output += namespace ? prefix + func : func;
+        var className   = 'c-' + fullName.replace(/\./g, '-');
+        var prefix      = expandNamespace([namespace, fullName].join('.'));
+        var func;
+
+        if (isNewFormat) {
+            let tpl = content.match(/<template>(.*)<\/template>/si);
+            let js  = content.match(/<script>(.*)<\/script>/si);
+            let css = content.match(/<style>(.*)<\/style>/si);
+
+            tpl = tpl ? `<div class="${className}">${tpl[1]}</div>` : '';
+            js  = js ? js[1] : '';
+            css = css ? css[1] : '';
+
+            output += `${prefix}(function () {
+                'use strict';
+
+                ${js}
+            })() || {};\n${prefix.replace(/ = $/, '')}.tpl = function (data) { 
+                ${compile(tpl)} 
+            };\n`;
+
+            lessCSSOutput += `.${className} { ${css} }\n`;
+        } else {
+            func = wrapFunctionBody(funcName, compile(content));
+            output += prefix + func;
+        }
     }
 });
 
-process.stdout.write(output);
+if (isNewFormat) {
+    if (!lib.fs.existsSync(outputDir)){
+        lib.fs.mkdirSync(outputDir);
+    }
+    lib.fs.writeFileSync(outputDir + '/components.js', output);
+    lib.fs.writeFileSync(outputDir + '/components.less', lessCSSOutput);
+} else {
+    process.stdout.write(output);
+}
